@@ -6,7 +6,6 @@ import json
 import pandas as pd
 from sqlalchemy import create_engine
 from openai import OpenAI
-from app.config import DB_CONFIG
 
 # ================================
 # INIT
@@ -17,10 +16,12 @@ if not api_key:
 
 client = OpenAI(api_key=api_key)
 
-engine = create_engine(
-    f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
-    f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("❌ DATABASE_URL not found.")
+
+engine = create_engine(DATABASE_URL)
+
 
 # ================================
 # SAFE PARSER
@@ -34,6 +35,7 @@ def safe_json_parse(content):
     except Exception:
         print("\n⚠️ RAW OUTPUT:\n", content)
         raise
+
 
 # ================================
 # VALIDATION
@@ -57,6 +59,7 @@ def validate_output(report_json):
         return False
 
     return not any(p in summary for p in banned)
+
 
 # ================================
 # MAIN FUNCTION

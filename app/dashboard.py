@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
+import os
 from sqlalchemy import create_engine
-from config import DB_CONFIG
 from dotenv import load_dotenv
 import requests
 
@@ -10,12 +10,10 @@ load_dotenv()
 # ================================
 # DB CONNECTION
 # ================================
-connection_string = (
-    f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
-    f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
-)
 
-engine = create_engine(connection_string)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+engine = create_engine(DATABASE_URL)
 
 # ================================
 # PAGE CONFIG
