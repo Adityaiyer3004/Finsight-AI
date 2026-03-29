@@ -27,6 +27,8 @@ engine = create_engine(DATABASE_URL)
 # 🔥 AUTO-INIT DATABASE (CRITICAL)
 # ================================
 def ensure_tables_exist(engine):
+    import subprocess
+
     with engine.begin() as conn:
 
         # Check if base table exists
@@ -38,16 +40,26 @@ def ensure_tables_exist(engine):
         """))
         exists = result.scalar()
 
+        # 🚨 IF NOT EXISTS → AUTO LOAD
         if not exists:
-            raise ValueError("❌ 'transactions' table missing. Run load_data.py first.")
+            print("⚠️ No tables found → running load_data.py")
 
-        # Create clean table
+            try:
+                subprocess.run(["python", "load_data.py"], check=True)
+            except Exception as e:
+                raise ValueError(f"❌ Failed to auto-load data: {e}")
+
+        # ✅ Ensure clean table
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS transactions_clean AS
+            DROP TABLE IF EXISTS transactions_clean;
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE transactions_clean AS
             SELECT * FROM transactions;
         """))
 
-        # Create view
+        # ✅ Ensure view
         conn.execute(text("""
             CREATE OR REPLACE VIEW category_summary AS
             SELECT 
@@ -60,7 +72,6 @@ def ensure_tables_exist(engine):
             GROUP BY category
             ORDER BY total DESC;
         """))
-
 
 # ================================
 # SAFE PARSER
