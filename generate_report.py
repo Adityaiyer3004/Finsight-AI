@@ -4,7 +4,7 @@ load_dotenv()
 import os
 import json
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from openai import OpenAI
 
 # ================================
@@ -21,6 +21,45 @@ if not DATABASE_URL:
     raise ValueError("❌ DATABASE_URL not found.")
 
 engine = create_engine(DATABASE_URL)
+
+
+# ================================
+# 🔥 AUTO-INIT DATABASE (CRITICAL)
+# ================================
+def ensure_tables_exist(engine):
+    with engine.begin() as conn:
+
+        # Check if base table exists
+        result = conn.execute(text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'transactions'
+            );
+        """))
+        exists = result.scalar()
+
+        if not exists:
+            raise ValueError("❌ 'transactions' table missing. Run load_data.py first.")
+
+        # Create clean table
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS transactions_clean AS
+            SELECT * FROM transactions;
+        """))
+
+        # Create view
+        conn.execute(text("""
+            CREATE OR REPLACE VIEW category_summary AS
+            SELECT 
+                category,
+                ABS(SUM(amount)) AS total,
+                COUNT(*) AS transaction_count,
+                (ABS(SUM(amount)) / SUM(ABS(SUM(amount))) OVER ()) * 100 AS percentage
+            FROM transactions_clean
+            WHERE transaction_type = 'debit'
+            GROUP BY category
+            ORDER BY total DESC;
+        """))
 
 
 # ================================
@@ -66,8 +105,11 @@ def validate_output(report_json):
 # ================================
 def generate_ai_report():
 
+    # 🔥 Ensure DB is ready
+    ensure_tables_exist(engine)
+
     # ================================
-    # FETCH DATA (FROM VIEW)
+    # FETCH DATA
     # ================================
     df = pd.read_sql("SELECT * FROM category_summary", engine)
 
@@ -140,13 +182,12 @@ OUTPUT JSON:
         extra_strict = ""
         if strict_level > 1:
             extra_strict = """
-- If output sounds generic → rewrite sharper
 - MUST include total spend (£)
 - MUST include top 3 combined %
 """
 
         prompt = f"""
-You are a top 1% fintech analyst reviewing a colleague’s work.
+You are a top 1% fintech analyst.
 
 DATA:
 {summary}
@@ -154,7 +195,7 @@ DATA:
 STRUCTURED ANALYSIS:
 {json.dumps(analysis_data, indent=2)}
 
-CORE RULES:
+RULES:
 - DO NOT rename categories
 - MUST include ALL categories
 - EVERY sentence MUST include £ or %
@@ -164,11 +205,7 @@ CORE RULES:
 - NO generic phrasing
 
 TONE:
-- Be decisive and opinionated
-
-CRITICAL THINKING:
-- Include cross-category insight
-- Include behavioural conclusion
+- Direct and decisive
 
 {extra_strict}
 
