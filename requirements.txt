@@ -1,0 +1,8 @@
+pandas
+sqlalchemy
+psycopg2-binary
+streamlit
+python-dotenv
+openai
+fastapi
+uvicorn
